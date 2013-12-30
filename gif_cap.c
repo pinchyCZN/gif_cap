@@ -251,6 +251,107 @@ void CreateBMPFile(LPTSTR pszFile, PBITMAPINFO pbi,
 	// Free memory. 
 	GlobalFree((HGLOBAL)lpBits);
 }
+int dither(unsigned char *data,int w,int h,int modulo,unsigned char *pixels)
+{
+	if(pixels!=0){
+		int i,j;
+		for(i=0;i<h;i++){
+			for(j=0;j<w;j++){
+				int c=data[i*modulo+j*3];
+				int r,g,b;
+				r=c&0xFF;
+				g=(c>>8)&0xFF;
+				b=(c>>16)&0xFF;
+				r>>=5;
+				b>>=5;
+				g>>=5;
+				pixels[i*j]=(r<<5)|(b<<3)|(g>>2);
+			}
+		}
+	}
+}
+int create_ctable(int *table,int len)
+{
+	int i,index=0,c=0;
+	//
+	for(i=0;i<255;i++){
+		int tmp;
+		tmp=c*255/85;
+		if(tmp>0xFF)
+			tmp=0xFF;
+		if(i<85){
+			table[index++]=tmp;
+			table[index++]=0;
+			table[index++]=0;
+		}else if(i<170){
+			table[index++]=0;
+			table[index++]=tmp;
+			table[index++]=0;
+		}else{
+			table[index++]=0;
+			table[index++]=0;
+			table[index++]=tmp;
+		}
+		if(i==85)
+			c=0;
+		else if(i==170)
+			c=0;
+		else
+			c++;
+	}
+	table[index++]=-1;
+}
+int save_gif(HDC hdc,HBITMAP hbmp,BITMAPINFO *bmp_info)
+{
+	int result=FALSE;
+	unsigned char *data;
+	BITMAPINFOHEADER *bmp_header;
+
+	bmp_header=bmp_info;
+	data=GlobalAlloc(GMEM_FIXED,bmp_header->biSizeImage);
+	
+	if (!data) 
+		return result; 
+	if(GetDIBits(hdc,hbmp,0,(WORD)bmp_header->biHeight,data,bmp_info,DIB_RGB_COLORS)){
+		unsigned char *gifimage=0;
+		unsigned char *pixels=0;
+		void *gsdata=0;
+		int bgindex=0;
+		int *colortable;
+		colortable=malloc(4*256*3);
+		create_ctable(colortable,4*256*3);
+
+		gsdata=newgif(&gifimage,bmp_header->biWidth,bmp_header->biHeight,colortable,bgindex);
+		if(gifimage!=0){
+			char *pixels=0;
+			int glen=0;
+			pixels=malloc(bmp_header->biWidth*bmp_header->biHeight);
+			if(pixels!=0){
+				dither(data,bmp_header->biWidth,bmp_header->biHeight,bmp_header->biWidth*3,pixels);
+				putgif(gsdata,pixels);
+				free(pixels);
+			}
+			glen=endgif(gsdata);
+			{
+				FILE *f;
+				f=fopen("c:\\temp\\test.gif","wb");
+				if(f!=0){
+					fwrite(gifimage,1,glen,f);
+					fclose(f);
+				}
+			}
+
+			if(gifimage!=0)
+				free(gifimage);
+
+		}
+		if(colortable!=0)
+			free(colortable);
+	}
+	if(data)
+		GlobalFree((HGLOBAL)data);
+	return result;
+}
 int take_snap(HWND hwnd)
 {
 	int result=FALSE;
@@ -276,6 +377,7 @@ int take_snap(HWND hwnd)
 				BitBlt(htarget, 0, 0, w, h, hscreen, 0, 0, SRCCOPY);
 				SelectObject(htarget, hold);
 				pBitmapInfo=CreateBitmapInfoStruct(hbmp);
+				save_gif(htarget,hbmp,pBitmapInfo);
 				CreateBMPFile(("b:\\picture.bmp"), pBitmapInfo, hbmp, htarget);
 				DeleteObject(hbmp);
 				result=TRUE;
