@@ -268,10 +268,14 @@ int take_snap(HWND hwnd)
 			hbmp=CreateCompatibleBitmap(hdc,w,h);
 			if(hbmp!=0){
 				PBITMAPINFO pBitmapInfo;
-				HBITMAP hrpl;
+				HBITMAP hold;
+				hold=SelectObject(hcomp,hbmp);
+				BitBlt(hcomp, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
+				SelectObject(hcomp, hold);
 				pBitmapInfo=CreateBitmapInfoStruct(hbmp);
-				hrpl=SelectObject(hcomp,hbmp);
 				CreateBMPFile(("b:\\picture.bmp"), pBitmapInfo, hbmp, hcomp);
+
+
 				/*
 				BitBlt(hcomp,0,0,w,h,hdc,0,0,SRCCOPY);
 				*/
