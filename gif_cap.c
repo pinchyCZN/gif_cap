@@ -253,46 +253,38 @@ void CreateBMPFile(LPTSTR pszFile, PBITMAPINFO pbi,
 }
 int take_snap(HWND hwnd)
 {
-	HDC hdc;
-	hdc=GetDC(NULL);
-	if(hdc!=0){
-		HDC hcomp;
-		hcomp=CreateCompatibleDC(hdc);
-		if(hcomp!=0){
+	int result=FALSE;
+	HDC hscreen;
+	HWND hwin=hwnd;
+	//hwin=GetDesktopWindow();
+	hscreen=GetDC(hwin);
+	if(hscreen!=0){
+		HDC htarget;
+		htarget=CreateCompatibleDC(hscreen);
+		if(htarget!=0){
 			RECT rect;
 			HBITMAP hbmp;
 			int w,h;
-			GetWindowRect(GetDesktopWindow(),&rect);
-			w=rect.right-rect.left;
-			h=rect.bottom-rect.top;
-			hbmp=CreateCompatibleBitmap(hdc,w,h);
+			GetClientRect(hwin,&rect);
+			w=rect.right-rect.left-1;
+			h=rect.bottom-rect.top-1;
+			hbmp=CreateCompatibleBitmap(hscreen,w,h);
 			if(hbmp!=0){
 				PBITMAPINFO pBitmapInfo;
 				HBITMAP hold;
-				hold=SelectObject(hcomp,hbmp);
-				BitBlt(hcomp, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
-				SelectObject(hcomp, hold);
+				hold=SelectObject(htarget,hbmp);
+				BitBlt(htarget, 0, 0, w, h, hscreen, 0, 0, SRCCOPY);
+				SelectObject(htarget, hold);
 				pBitmapInfo=CreateBitmapInfoStruct(hbmp);
-				CreateBMPFile(("b:\\picture.bmp"), pBitmapInfo, hbmp, hcomp);
-
-
-				/*
-				BitBlt(hcomp,0,0,w,h,hdc,0,0,SRCCOPY);
-				*/
-
-				//copy to clipboard
-				OpenClipboard(NULL);
-				EmptyClipboard();
-				SetClipboardData(CF_BITMAP, hbmp);
-				CloseClipboard();
-
+				CreateBMPFile(("b:\\picture.bmp"), pBitmapInfo, hbmp, htarget);
 				DeleteObject(hbmp);
+				result=TRUE;
 			}
-			DeleteDC(hcomp);
+			DeleteDC(htarget);
 		}
-		ReleaseDC(NULL,hdc);
+		ReleaseDC(hwin,hscreen);
 	}
-
+	return result;
 }
 BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
