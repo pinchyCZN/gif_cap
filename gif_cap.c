@@ -251,55 +251,75 @@ void CreateBMPFile(LPTSTR pszFile, PBITMAPINFO pbi,
 	// Free memory. 
 	GlobalFree((HGLOBAL)lpBits);
 }
-int dither(unsigned char *data,int w,int h,int modulo,unsigned char *pixels)
+static int colortable[256*3+1];
+static int table_len=0;
+int dither(unsigned char *data,int w,int h,int row_width,unsigned char *pixels)
 {
 	if(pixels!=0){
-		int i,j;
+		int i,j,k,poffset=0;
+		int y=0;
 		for(i=0;i<h;i++){
 			for(j=0;j<w;j++){
-				int c=data[i*modulo+j*3];
-				int r,g,b;
-				r=c&0xFF;
-				g=(c>>8)&0xFF;
-				b=(c>>16)&0xFF;
-				r>>=5;
-				b>>=5;
-				g>>=5;
-				pixels[i*j]=(r<<5)|(b<<3)|(g>>2);
+				int x=y+j*4;
+				int index=0;
+				for(k=0;k<table_len;k++){
+					unsigned char r,g,b;
+					b=data[x+0]&0xE0;
+					g=data[x+1]&0xE0;
+					r=data[x+2]&0xC0;
+					if(colortable[k]==r && colortable[k+1]==g && colortable[k+2]==b){
+						index=k;
+						break;
+					}
+				}
+				pixels[poffset++]=index;
 			}
+			y+=row_width;
 		}
 	}
 }
-int create_ctable(int *table,int len)
+int create_ctable(unsigned char *data,int w,int h,int len)
 {
-	int i,index=0,c=0;
-	//
-	for(i=0;i<255;i++){
-		int tmp;
-		tmp=c*255/85;
-		if(tmp>0xFF)
-			tmp=0xFF;
-		if(i<85){
-			table[index++]=tmp;
-			table[index++]=0;
-			table[index++]=0;
-		}else if(i<170){
-			table[index++]=0;
-			table[index++]=tmp;
-			table[index++]=0;
-		}else{
-			table[index++]=0;
-			table[index++]=0;
-			table[index++]=tmp;
+	int i,j,k,index=0,c=0;
+	int modulo;
+	j=h;
+	if(j==0)
+		j=1;
+	modulo=len/j;
+	for(i=0;i<h;i++){
+		for(j=0;j<w;j++){
+			unsigned char r,g,b;
+			int found=FALSE;
+			int x=i*modulo+(j*4);
+			b=data[x+0]&0xE0;
+			g=data[x+1]&0xE0;
+			r=data[x+2]&0xC0;
+			if(index<256){
+				for(k=0;k<index;k+=3){
+					if(colortable[k]==r && colortable[k+1]==g && colortable[k+2]==b){
+						found=TRUE;
+						break;
+					}
+				}
+				if(!found){
+					colortable[index*3]=r;
+					colortable[index*3+1]=g;
+					colortable[index*3+2]=b;
+					index++;
+				}
+			}
+			else
+				break;
 		}
-		if(i==85)
-			c=0;
-		else if(i==170)
-			c=0;
-		else
-			c++;
 	}
-	table[index++]=-1;
+	for(i=index;i<256;i++){
+		colortable[index*3]=0;
+		colortable[index*3+1]=0;
+		colortable[index*3+2]=0;
+		index++;
+	}
+	table_len=index;
+	colortable[index*3]=-1;
 }
 int save_gif(HDC hdc,HBITMAP hbmp,BITMAPINFO *bmp_info)
 {
@@ -317,9 +337,7 @@ int save_gif(HDC hdc,HBITMAP hbmp,BITMAPINFO *bmp_info)
 		unsigned char *pixels=0;
 		void *gsdata=0;
 		int bgindex=0;
-		int *colortable;
-		colortable=malloc(4*256*3);
-		create_ctable(colortable,4*256*3);
+		create_ctable(data,bmp_header->biWidth,bmp_header->biHeight,bmp_header->biSizeImage);
 
 		gsdata=newgif(&gifimage,bmp_header->biWidth,bmp_header->biHeight,colortable,bgindex);
 		if(gifimage!=0){
@@ -327,14 +345,23 @@ int save_gif(HDC hdc,HBITMAP hbmp,BITMAPINFO *bmp_info)
 			int glen=0;
 			pixels=malloc(bmp_header->biWidth*bmp_header->biHeight);
 			if(pixels!=0){
-				dither(data,bmp_header->biWidth,bmp_header->biHeight,bmp_header->biWidth*3,pixels);
+				int h=bmp_header->biHeight;
+				int row_width;
+				if(h==0)
+					h=1;
+				row_width=bmp_header->biSizeImage/h;
+				if(bmp_header->biSizeImage != (3*bmp_header->biWidth*bmp_header->biHeight)){
+					int i;
+					i++;
+				}
+				dither(data,bmp_header->biWidth,bmp_header->biHeight,row_width,pixels);
 				putgif(gsdata,pixels);
 				free(pixels);
 			}
 			glen=endgif(gsdata);
 			{
 				FILE *f;
-				f=fopen("c:\\temp\\test.gif","wb");
+				f=fopen("b:\\test.gif","wb");
 				if(f!=0){
 					fwrite(gifimage,1,glen,f);
 					fclose(f);
@@ -345,8 +372,6 @@ int save_gif(HDC hdc,HBITMAP hbmp,BITMAPINFO *bmp_info)
 				free(gifimage);
 
 		}
-		if(colortable!=0)
-			free(colortable);
 	}
 	if(data)
 		GlobalFree((HGLOBAL)data);
