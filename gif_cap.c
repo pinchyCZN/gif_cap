@@ -309,6 +309,7 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 {
 	int result=FALSE;
 	unsigned char *data;
+	int *rgb;
 	BITMAPINFO bmi={0};
 
 	data=GlobalAlloc(GMEM_FIXED,bmp->bmWidthBytes*bmp->bmHeight);
@@ -316,7 +317,7 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 	if (!data) 
 		return result;
 	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-	bmi.bmiHeader.biBitCount=32;
+	bmi.bmiHeader.biBitCount=8; //32;
 	bmi.bmiHeader.biWidth=bmp->bmWidth;
 	bmi.bmiHeader.biHeight=bmp->bmHeight;
 	bmi.bmiHeader.biPlanes=bmp->bmPlanes;
@@ -324,6 +325,8 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 	bmi.bmiHeader.biClrImportant=0;
 	bmi.bmiHeader.biClrUsed=0;
 	bmi.bmiHeader.biSizeImage = ((bmi.bmiHeader.biWidth * 32 +31)& ~31) /8 * bmi.bmiHeader.biHeight;
+	rgb=&bmi.bmiColors[0];
+	rgb[0]=0xDEADBEEF;
 
 	if(GetDIBits(hdc,hbmp,0,(WORD)bmp->bmHeight,data,&bmi,DIB_RGB_COLORS)){
 			*pixels=malloc(w*h);
