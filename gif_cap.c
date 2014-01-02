@@ -331,10 +331,17 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 	if(GetDIBits(hdc,hbmp,0,(WORD)bmp->bmHeight,data,&bmi,DIB_RGB_COLORS)){
 			*pixels=malloc(w*h);
 			if(*pixels!=0){
+				{
+					int i;
+					for(i=0;i<
+					memcpy(*pixels,data,w*h);
+				}
+				{
 				int row_width;
 				row_width=bmp->bmWidthBytes;
 				downsample(data,w,h,row_width,*pixels);
 				result=TRUE;
+				}
 			}
 	}
 	if(data)
