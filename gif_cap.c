@@ -5,6 +5,16 @@
 HINSTANCE ghinstance=0;
 HINSTANCE ghprevinstance=0;
 HWND ghdlg=0;
+char gif_fname[MAX_PATH]={0};
+int auto_inc_fname=FALSE;
+int start_key=VK_LSHIFT;
+//int stop_key=VK_LCONTROL;
+int stop_key=VK_LSHIFT;
+int gif_delay=5;
+int cap_delay=33;
+int frame_limit=0;
+int old_frame_limit=0;
+
 int assert(int a)
 {
 	if(!a){
@@ -71,8 +81,12 @@ int set_title(HWND hwnd)
 {
 	char title[255]={0};
 	RECT rect={0};
+	RECT wrect={0};
 	GetClientRect(hwnd,&rect);
-	sprintf(title,"gif cap w=%i h=%i x=%i y=%i",rect.right,rect.bottom,0,0);
+	GetWindowRect(hwnd,&wrect);
+	wrect.left+=GetSystemMetrics(SM_CXDLGFRAME);
+	wrect.top+=GetSystemMetrics(SM_CYDLGFRAME)+GetSystemMetrics(SM_CYCAPTION);
+	sprintf(title,"gif cap w=%i h=%i x=%i y=%i",rect.right,rect.bottom,wrect.left,wrect.top);
 	SetWindowText(hwnd,title);
 	return TRUE;
 }
@@ -80,8 +94,8 @@ int get_main_region(HWND hwnd,HRGN *hregion)
 {
 	HRGN hr=*hregion;
 	RECT rect;
-	if(hr!=0)
-		DeleteObject(hr);
+	//if(hr!=0)
+	//	DeleteObject(hr);
 	GetWindowRect(hwnd,&rect);
 	hr=CreateRectRgn(0,0,rect.right-rect.left,rect.bottom-rect.top);
 	*hregion=hr;
@@ -103,10 +117,10 @@ int clear_window(HWND hwnd,HRGN *hregion)
 	hr=*hregion;
 	//GetWindowRgn(hwnd,hr);
 	htmp=CreateRectRgn(cx,cy,cx+crect.right,cy+crect.bottom);
-	if(htmp!=0 && hr!=0){
-		//FillRgn(
-		CombineRgn(hr, hr, htmp, RGN_DIFF);
-		//NULLREGION
+	if(htmp!=0){
+		if(hr!=0){
+			CombineRgn(hr, hr, htmp, RGN_DIFF);
+		}
 		DeleteObject(htmp);
 	}
 	set_title(hwnd);
@@ -372,7 +386,7 @@ int animate(HWND hwnd,int step)
 
 		gsdata=newgif(&gifimage,w,h,colortable,0);
 		if(gsdata!=0){
-			animategif(gsdata,0,5,0,2);
+			animategif(gsdata,0,gif_delay,0,2);
 		}
 	}
 	else if(step==1){
@@ -398,26 +412,174 @@ int animate(HWND hwnd,int step)
 			_snprintf(str,sizeof(str),"DONE %i (0x%08X)",glen,glen);
 			SetWindowText(hwnd,str);
 			{
-				FILE *f;
-				f=fopen("b:\\test.gif","wb");
-				if(f!=0){
-					fwrite(gifimage,1,glen,f);
-					fclose(f);
+				if(gif_fname[0]!=0){
+					FILE *f;
+					f=fopen(gif_fname,"wb");
+					if(f!=0){
+						fwrite(gifimage,1,glen,f);
+						fclose(f);
+					}
 				}
 			}
-
 		}
 		if(gifimage!=0)
 			free(gifimage);
 	}
 
 }
+int sleep_exit(int t,int key)
+{
+	DWORD tick,delta=MAXDWORD;
+	tick=GetTickCount();
+	do{
+		if(GetAsyncKeyState(key)&0x8001){
+			return TRUE;
+		}
+		Sleep(1);
+		delta=GetTickCount()-tick;
+	}while(delta<t);
+	return FALSE;
+}
+int key_thread()
+{
+	while(TRUE){
+		Sleep(100);
+		if(GetAsyncKeyState(start_key)&0x8001){
+			int i;
+			WINDOWPLACEMENT wp={0};
+			wp.length=sizeof(wp);
+			if(GetWindowPlacement(ghdlg,&wp)){
+				if(wp.showCmd==SW_SHOWMINIMIZED)
+					continue;
+			}
+			Beep(1000,100);
+			PostMessage(ghdlg,WM_APP,'1',0);
+			for(i=0;i<5000;i++){
+				PostMessage(ghdlg,WM_APP,'1',1);
+				if(sleep_exit(cap_delay,stop_key))
+					break;
+				if(GetAsyncKeyState(stop_key)&1)
+					break;
+				if(frame_limit!=0){
+					if(frame_limit>i)
+						break;
+				}
+			}
+			PostMessage(ghdlg,WM_APP,'1',2);
+			Beep(800,100);
+			Sleep(250);
+			GetAsyncKeyState(start_key);
+		}
+		else if(GetAsyncKeyState(VK_F1)&0x8001){
+			PostMessage(ghdlg,WM_APP,'2',0);
+		}
+	}
+}
+int add_trailing_slash(char *fname,int size)
+{
+	if(fname!=0 && fname[0]!=0 && size>0){
+		int len=strlen(fname);
+		if((len<size-1) && (len>0)){
+			if(fname[len-1]!='\\'){
+				fname[len]='\\';
+				fname[len+1]=0;
+			}
+		}
+		fname[size-1]=0;
+	}
+	return TRUE;
+}
+int dir_exists(char *path)
+{
+	DWORD attrib=GetFileAttributes(path);
+	if((attrib!=MAXDWORD) && (attrib&FILE_ATTRIBUTE_DIRECTORY))
+		return TRUE;
+	else
+		return FALSE;
+}
+int set_file_path(HWND hwnd,int ctrl)
+{
+	char path[MAX_PATH]={0};
+	const char *a[2]={"B:\\","C:\\TEMP\\"};
+	int i;
+	for(i=0;i<sizeof(a)/sizeof(char *);i++){
+		if(dir_exists(a[i])){
+			_snprintf(path,sizeof(path),"%s%s",a[i],"temp.gif");
+			break;
+		}
+	}
+	if(path[0]==0){
+		GetTempPath(sizeof(path),path);
+		if(dir_exists(path)){
+			add_trailing_slash(path,sizeof(path));
+			_snprintf(path,sizeof(path),"%s%s",path,"temp.gif");
+		}
+		else
+			path[0]=0;
+	}
+	strncpy(gif_fname,path,sizeof(gif_fname));
+	gif_fname[sizeof(gif_fname)-1]=0;
+	SetDlgItemText(hwnd,ctrl,path);
+	return TRUE;
+}
+
+int populate_vkeys(HWND hwnd,int ctrl)
+{
+extern char *virtual_keys[256];
+	int i;
+	for(i=0;i<256;i++){
+		int index;
+		index=SendDlgItemMessage(hwnd,ctrl,CB_ADDSTRING,0,virtual_keys[i]);
+		if(index>=0)
+			SendDlgItemMessage(hwnd,ctrl,CB_SETITEMDATA,index,i);	
+	}
+	return TRUE;
+}
+int set_list_index(HWND hwnd,int ctrl,int key)
+{
+	int i,count;
+	count=SendDlgItemMessage(hwnd,ctrl,CB_GETCOUNT,0,0);
+	if(count==CB_ERR)
+		return FALSE;
+	for(i=0;i<count;i++){
+		int data;
+		data=SendDlgItemMessage(hwnd,ctrl,CB_GETITEMDATA,i,0);
+		if(data!=CB_ERR && data==key){
+			SendDlgItemMessage(hwnd,ctrl,CB_SETCURSEL,i,0);
+			break;
+		}
+	}
+	return TRUE;
+}
+int key_changed(HWND hwnd,int ctrl,int *key)
+{
+	int index;
+	index=SendDlgItemMessage(hwnd,ctrl,CB_GETCURSEL,0,0);
+	if(index>=0){
+		int data;
+		data=SendDlgItemMessage(hwnd,ctrl,CB_GETITEMDATA,index,0);
+		if(data!=CB_ERR){
+			key[0]=data;
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+int edit_changed(HWND hwnd,int ctrl,int *value)
+{
+	char str[80]={0};
+	GetDlgItemText(hwnd,ctrl,str,sizeof(str));
+	value[0]=atoi(str);
+	return TRUE;
+}
 BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
 	static HRGN hregion=0;
+	if(msg!=WM_CTLCOLORSTATIC && msg!=WM_SETCURSOR && msg!=WM_NCHITTEST
+		&& msg!=WM_MOUSEMOVE && msg!=WM_MOUSEFIRST)
 	{
 		static DWORD tick=0;
-		//print_msg(msg,lparam,wparam,hwnd);
+		print_msg(msg,lparam,wparam,hwnd);
 	}
 	switch(msg){
 	case WM_INITDIALOG:
@@ -427,26 +589,142 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			center_window_to_desk(hwnd);
 			GetWindowRect(hwnd,&rect);
 			hregion=CreateRectRgn(0,0,rect.right-rect.left,rect.bottom-rect.top);
-			clear_window(hwnd,&hregion);
 			SetWindowRgn(hwnd,hregion,TRUE);
 			SetWindowPos(hwnd,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);
+			SendDlgItemMessage(hwnd,IDC_FNAME,EM_LIMITTEXT,MAX_PATH,0);
+			SendDlgItemMessage(hwnd,IDC_FRAME_COUNT,EM_LIMITTEXT,6,0);
+			SendDlgItemMessage(hwnd,IDC_GIF_DELAY,EM_LIMITTEXT,6,0);
+			SendDlgItemMessage(hwnd,IDC_CAP_DELAY,EM_LIMITTEXT,10,0);
+			ShowWindow(GetDlgItem(hwnd,IDC_FRAME_COUNT),FALSE);
+			set_file_path(hwnd,IDC_FNAME);
+			{
+				char str[80]={0};
+				sprintf(str,"%i",gif_delay);
+				SetDlgItemText(hwnd,IDC_GIF_DELAY,str);
+				sprintf(str,"%i",cap_delay);
+				SetDlgItemText(hwnd,IDC_CAP_DELAY,str);
+			}
+			populate_vkeys(hwnd,IDC_START_KEY);
+			populate_vkeys(hwnd,IDC_STOP_KEY);
+			set_list_index(hwnd,IDC_START_KEY,start_key);
+			set_list_index(hwnd,IDC_STOP_KEY,stop_key);
 			create_ctable();
 		}
 		break;
 	case WM_APP:
 		switch(wparam){
 		case '1':
+			if(lparam==0){
+				clear_window(hwnd,&hregion);
+				SetWindowRgn(hwnd,hregion,TRUE);
+			}
+
 			animate(hwnd,lparam);
 			printf("made it\n");
 			break;
+		case '2':
+			get_main_region(hwnd,&hregion);
+			SetWindowRgn(hwnd,hregion,TRUE);
+			break;
+
 		}
 		break;
+	case WM_MOVE:
+		set_title(hwnd);
+		break;
 	case WM_SIZE:
-		clear_window(hwnd,&hregion);
+		get_main_region(hwnd,&hregion);
+		//clear_window(hwnd,&hregion);
 		SetWindowRgn(hwnd,hregion,TRUE);
+		break;
+	case WM_HELP:
 		break;
 	case WM_COMMAND:
 		switch(LOWORD(wparam)){
+		case IDOK:
+			{
+				HWND hctrl=GetDlgItem(hwnd,IDOK);
+				if(hctrl==GetFocus()){
+					clear_window(hwnd,&hregion);
+					SetWindowRgn(hwnd,hregion,TRUE);
+				}
+			}
+			break;
+		case IDC_FNAME:
+			switch(HIWORD(wparam)){
+			case EN_CHANGE:
+				{
+					char str[MAX_PATH]={0};
+					GetDlgItemText(hwnd,IDC_FNAME,str,sizeof(str));
+					strncpy(gif_fname,str,sizeof(gif_fname));
+					gif_fname[sizeof(gif_fname)-1]=0;
+				}
+				printf("gif_fname=%s\n",gif_fname);
+				break;
+			}
+			break;
+		case IDC_AUTOINCREMENT:
+			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_AUTOINCREMENT))
+				auto_inc_fname=TRUE;
+			else
+				auto_inc_fname=FALSE;
+			printf("auto_inc_fname=%i\n",auto_inc_fname);
+			break;
+		case IDC_FRAME_LIMIT:
+			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_FRAME_LIMIT)){
+				char str[80]={0};
+				ShowWindow(GetDlgItem(hwnd,IDC_FRAME_COUNT),TRUE);
+				frame_limit=old_frame_limit;
+				sprintf(str,"%i",frame_limit);
+				SetDlgItemText(hwnd,IDC_FRAME_COUNT,str);
+			}
+			else{
+				old_frame_limit=frame_limit;
+				frame_limit=0;
+				printf("frame_limit=%i\n",frame_limit);
+				ShowWindow(GetDlgItem(hwnd,IDC_FRAME_COUNT),FALSE);
+			}
+			break;
+		case IDC_FRAME_COUNT:
+			switch(HIWORD(wparam)){
+			case EN_CHANGE:
+				edit_changed(hwnd,IDC_FRAME_COUNT,&frame_limit);
+				printf("frame_limit=%i\n",frame_limit);
+				break;
+			}
+			break;
+		case IDC_GIF_DELAY:
+			switch(HIWORD(wparam)){
+			case EN_CHANGE:
+				edit_changed(hwnd,IDC_GIF_DELAY,&gif_delay);
+				printf("gif_delay=%i\n",gif_delay);
+				break;
+			}
+			break;
+		case IDC_CAP_DELAY:
+			switch(HIWORD(wparam)){
+			case EN_CHANGE:
+				edit_changed(hwnd,IDC_CAP_DELAY,&cap_delay);
+				printf("cap_delay=%i\n",cap_delay);
+				break;
+			}
+			break;
+		case IDC_START_KEY:
+			switch(HIWORD(wparam)){
+			case CBN_SELCHANGE:
+				if(key_changed(hwnd,IDC_START_KEY,&start_key))
+					printf("start_key=%i\n",start_key);
+				break;
+			}
+			break;
+		case IDC_STOP_KEY:
+			switch(HIWORD(wparam)){
+			case CBN_SELCHANGE:
+				if(key_changed(hwnd,IDC_STOP_KEY,&stop_key))
+					printf("stop_key=%i\n",stop_key);
+				break;
+			}
+			break;
 		case IDCANCEL:
 			PostMessage(hwnd,WM_CLOSE,0,0);
 			break;
@@ -460,30 +738,10 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 	}
 	return 0;
 }
-int key_thread()
-{
-	while(TRUE){
-		Sleep(100);
-		if(GetAsyncKeyState(VK_SHIFT)&0x8001){
-			int i;
-			Beep(1000,100);
-			PostMessage(ghdlg,WM_APP,'1',0);
-			Sleep(33);
-			for(i=0;i<5000;i++){
-				PostMessage(ghdlg,WM_APP,'1',1);
-				Sleep(33);
-				if(GetAsyncKeyState(VK_CONTROL)&0x8001)
-					break;
-			}
-			PostMessage(ghdlg,WM_APP,'1',2);
-			Beep(800,100);
-			printf("1 presed\n");
-		}
-	}
-}
+
 int CALLBACK WinMain(HINSTANCE hinstance,HINSTANCE hprevinstance,char *cmdline,int showcmd)
 {
-	//open_console();
+//	open_console();
 	_beginthread(key_thread,0,0);
 	return DialogBoxParam(hinstance,MAKEINTRESOURCE(IDD_DIALOG1),NULL,gifcap,NULL);
 }
