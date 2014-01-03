@@ -7,9 +7,9 @@ HINSTANCE ghprevinstance=0;
 HWND ghdlg=0;
 char gif_fname[MAX_PATH]={0};
 int auto_inc_fname=FALSE;
-int start_key=VK_LSHIFT;
+int start_key=VK_RSHIFT;
 //int stop_key=VK_LCONTROL;
-int stop_key=VK_LSHIFT;
+int stop_key=VK_RSHIFT;
 int gif_delay=5;
 int cap_delay=33;
 int frame_limit=0;
@@ -296,7 +296,7 @@ int create_ctable()
 		r=i>>6;
 		g=(i>>3)&0x7;
 		b=i&3;
-		colortable[index*3]=r<<6;
+		colortable[index*3]=i&0xE0; //r<<6;
 		colortable[index*3+1]=g<<5;
 		colortable[index*3+2]=b<<5;
 		index++;
@@ -305,47 +305,67 @@ int create_ctable()
 	created=TRUE;
 	return TRUE;
 }
+int copy_cmap(RGBQUAD *rgb)
+{
+	int i;
+	for(i=0;i<256;i++){
+		colortable[i*3]=rgb[i].rgbRed;
+		colortable[i*3+1]=rgb[i].rgbGreen;
+		colortable[i*3+2]=rgb[i].rgbBlue;
+	}
+	colortable[i*3]=-1;
+	return TRUE;
+}
 int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,int h)
 {
 	int result=FALSE;
 	unsigned char *data;
 	int *rgb;
-	BITMAPINFO bmi={0};
+	BITMAPINFO *bmi;
 
+	bmi=malloc(sizeof(BITMAPINFO)+(256*sizeof(RGBQUAD)));
+	if(!bmi)
+		return result;
 	data=GlobalAlloc(GMEM_FIXED,bmp->bmWidthBytes*bmp->bmHeight);
 	
-	if (!data) 
+	if(!data){
+		if(bmi)
+			free(bmi);
 		return result;
-	bmi.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
-	bmi.bmiHeader.biBitCount=8; //32;
-	bmi.bmiHeader.biWidth=bmp->bmWidth;
-	bmi.bmiHeader.biHeight=bmp->bmHeight;
-	bmi.bmiHeader.biPlanes=bmp->bmPlanes;
-	bmi.bmiHeader.biCompression=BI_RGB;
-	bmi.bmiHeader.biClrImportant=0;
-	bmi.bmiHeader.biClrUsed=0;
-	bmi.bmiHeader.biSizeImage = ((bmi.bmiHeader.biWidth * 32 +31)& ~31) /8 * bmi.bmiHeader.biHeight;
-	rgb=&bmi.bmiColors[0];
+	}
+	bmi->bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
+	bmi->bmiHeader.biBitCount=32;
+	bmi->bmiHeader.biWidth=bmp->bmWidth;
+	bmi->bmiHeader.biHeight=bmp->bmHeight;
+	bmi->bmiHeader.biPlanes=bmp->bmPlanes;
+	bmi->bmiHeader.biCompression=BI_RGB;
+	bmi->bmiHeader.biClrImportant=0;
+	bmi->bmiHeader.biClrUsed=0;
+	bmi->bmiHeader.biSizeImage = ((bmi->bmiHeader.biWidth * 32 +31)& ~31) /8 * bmi->bmiHeader.biHeight;
+	rgb=&bmi->bmiColors[0];
 	rgb[0]=0xDEADBEEF;
 
-	if(GetDIBits(hdc,hbmp,0,(WORD)bmp->bmHeight,data,&bmi,DIB_RGB_COLORS)){
+	if(GetDIBits(hdc,hbmp,0,(WORD)bmp->bmHeight,data,bmi,DIB_RGB_COLORS)){
 			*pixels=malloc(w*h);
 			if(*pixels!=0){
-				{
-					int i;
-					for(i=0;i<
+				if(bmi->bmiHeader.biBitCount==8){
+					copy_cmap(bmi->bmiColors);
 					memcpy(*pixels,data,w*h);
+					result=TRUE;
 				}
-				{
-				int row_width;
-				row_width=bmp->bmWidthBytes;
-				downsample(data,w,h,row_width,*pixels);
-				result=TRUE;
+				else{
+					int row_width;
+					row_width=bmp->bmWidthBytes;
+					downsample(data,w,h,row_width,*pixels);
+					result=TRUE;
 				}
 			}
 	}
 	if(data)
 		GlobalFree((HGLOBAL)data);
+	if(bmi)
+		free(bmi);
+
 	return result;
 }
 int take_snap(HWND hwnd,unsigned char **pixels,int w,int h)
@@ -406,6 +426,7 @@ int animate(HWND hwnd,int step)
 			if(pixels!=0){
 				int len;
 				char str[80];
+				//putgifcolortable(gsdata,colortable);
 				len=putgif(gsdata,pixels);
 				_snprintf(str,sizeof(str),"%i (0x%08X)",len,len);
 				str[sizeof(str)-1]=0;
