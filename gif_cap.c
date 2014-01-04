@@ -1,16 +1,18 @@
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 #include "resource.h"
 
 HINSTANCE ghinstance=0;
 HINSTANCE ghprevinstance=0;
 HWND ghdlg=0;
+int thread_ack=0;
 char gif_fname[MAX_PATH]={0};
 int auto_inc_fname=FALSE;
 int start_key=VK_RSHIFT;
 //int stop_key=VK_LCONTROL;
 int stop_key=VK_RSHIFT;
-int gif_delay=5;
+int gif_delay=4;
 int cap_delay=33;
 int frame_limit=0;
 int old_frame_limit=0;
@@ -22,6 +24,46 @@ int assert(int a)
 		MessageBox(NULL,"ASSERT","ERROR",MB_OK|MB_SYSTEMMODAL);
 	}
 	return a;
+}
+int strstri(const char *s1,const char *s2)
+{
+	int i,j,k;
+	for(i=0;s1[i];i++)
+		for(j=i,k=0;tolower(s1[j])==tolower(s2[k]);j++,k++)
+			if(!s2[k+1])
+				return (s1+i);
+	return NULL;
+}
+int inc_fname(char *path,int pathlen)
+{
+	char drive[_MAX_DRIVE]={0},dir[_MAX_DIR]={0},fname[_MAX_FNAME]={0},ext[_MAX_EXT]={0};
+	_splitpath(path,drive,dir,fname,ext);
+	if(fname[0]!=0){
+		int i,len,num=0;
+		len=strlen(fname);
+		for(i=len-1;i>=0;i--){
+			char *s;
+			if(isdigit(fname[i])){
+				if(i==0){
+					s=fname;
+					goto INC;
+				}
+				continue;
+			}
+			else{
+				s=fname+i+1;
+INC:
+				if(s[0]!=0){
+					num=atoi(s);
+					num++;
+					s[0]=0;
+				}
+				break;
+			}
+		}
+		_snprintf(path,pathlen,"%s%s%s%03i%s",drive,dir,fname,num,ext);
+	}
+	return TRUE;
 }
 void open_console()
 {
@@ -372,6 +414,10 @@ int animate(HWND hwnd,int step)
 			_snprintf(str,sizeof(str),"DONE %i (0x%08X)",glen,glen);
 			SetWindowText(hwnd,str);
 			{
+				if(auto_inc_fname){
+					inc_fname(gif_fname,sizeof(gif_fname));
+					SetDlgItemText(hwnd,IDC_FNAME,gif_fname);
+				}
 				if(gif_fname[0]!=0){
 					FILE *f;
 					f=fopen(gif_fname,"wb");
@@ -385,7 +431,8 @@ int animate(HWND hwnd,int step)
 		if(gifimage!=0)
 			free(gifimage);
 	}
-
+	thread_ack=1;
+	return TRUE;
 }
 int sleep_exit(int t,int key)
 {
@@ -404,6 +451,8 @@ int key_thread()
 {
 	while(TRUE){
 		Sleep(100);
+		if(ghdlg==0)
+			continue;
 		if(GetAsyncKeyState(start_key)&0x8001){
 			int i;
 			WINDOWPLACEMENT wp={0};
@@ -413,9 +462,13 @@ int key_thread()
 					continue;
 			}
 			Beep(1000,100);
+			thread_ack=0;
 			PostMessage(ghdlg,WM_APP,'1',0);
 			for(i=0;i<5000;i++){
-				PostMessage(ghdlg,WM_APP,'1',1);
+				if(thread_ack){
+					thread_ack=0;
+					PostMessage(ghdlg,WM_APP,'1',1);
+				}
 				if(sleep_exit(cap_delay,stop_key))
 					break;
 				if(GetAsyncKeyState(stop_key)&1)
@@ -568,6 +621,8 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			populate_vkeys(hwnd,IDC_STOP_KEY);
 			set_list_index(hwnd,IDC_START_KEY,start_key);
 			set_list_index(hwnd,IDC_STOP_KEY,stop_key);
+			if(do_dither)
+				CheckDlgButton(hwnd,IDC_DITHER,BST_CHECKED);
 			create_ctable();
 		}
 		break;
@@ -629,6 +684,36 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			else
 				auto_inc_fname=FALSE;
 			printf("auto_inc_fname=%i\n",auto_inc_fname);
+			break;
+		case IDC_DITHER:
+			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_DITHER))
+				do_dither=TRUE;
+			else
+				do_dither=FALSE;
+			if(do_dither){
+				char str[MAX_PATH]={0};
+				char *s;
+				GetDlgItemText(hwnd,IDC_FNAME,str,sizeof(str));
+				s=strstri(str,"d.gif");
+				if(s==0){
+					s=strstri(str,".gif");
+					if(s){
+						s[0]=0;
+						_snprintf(str,sizeof(str),"%sd.gif",str);
+						SetDlgItemText(hwnd,IDC_FNAME,str);
+					}
+				}
+			}else{
+				char str[MAX_PATH]={0};
+				char *s;
+				GetDlgItemText(hwnd,IDC_FNAME,str,sizeof(str));
+				s=strstri(str,"d.gif");
+				if(s){
+					s[0]=0;
+					_snprintf(str,sizeof(str),"%s.gif",str);
+					SetDlgItemText(hwnd,IDC_FNAME,str);
+				}
+			}
 			break;
 		case IDC_FRAME_LIMIT:
 			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_FRAME_LIMIT)){
