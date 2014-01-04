@@ -265,6 +265,58 @@ void CreateBMPFile(LPTSTR pszFile, PBITMAPINFO pbi,
 	// Free memory. 
 	GlobalFree((HGLOBAL)lpBits);
 }
+int dither(char *data,int w,int h,int row_width)
+{
+	int i,j;
+	for(i=0;i<h;i++){
+		for(j=0;j<w;j++){
+			int x;
+			unsigned char r,g,b;
+			unsigned char nr,ng,nb;
+			unsigned quant[3];
+			x=(i*row_width)+(j*4);
+			b=data[x+0];
+			g=data[x+1];
+			r=data[x+2];
+			nr=r&0xC0;
+			nb=b&0xE0;
+			ng=g&0xE0;
+			data[x+0]=nb;
+			data[x+1]=ng;
+			data[x+2]=nr;
+			quant[2]=r-nr;
+			quant[1]=g-ng;
+			quant[0]=b-nb;
+			{
+				int k;
+				for(k=0;k<3;k++){
+					int z;
+					if((j+1)<w){
+						z=(i*row_width)+((j+1)*4);
+						data[z+k]=data[z+k]+(7*quant[k]/16);
+					}
+					if((i+1)<h){
+						if((j-1)>=0){
+							z=((i+1)*row_width)+((j-1)*4);
+							data[z+k]=data[z+k]+(3*quant[k]/16);
+						}
+						{
+							z=((i+1)*row_width)+((j+0)*4);
+							data[z+k]=data[z+k]+(5*quant[k]/16);
+						}
+						if((j+1)<w){
+							z=((i+1)*row_width)+((j+1)*4);
+							data[z+k]=data[z+k]+(quant[k]/16);
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+
+
 static int colortable[256*3+1];
 int downsample(unsigned char *data,int w,int h,int row_width,unsigned char *pixels)
 {
@@ -356,6 +408,7 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 				else{
 					int row_width;
 					row_width=bmp->bmWidthBytes;
+					dither(data,w,h,row_width);
 					downsample(data,w,h,row_width,*pixels);
 					result=TRUE;
 				}
