@@ -110,6 +110,10 @@ SOURCE=.\gifsave89.c
 
 SOURCE=.\null.c
 # End Source File
+# Begin Source File
+
+SOURCE=.\resize.c
+# End Source File
 # End Group
 # Begin Group "Header Files"
 
@@ -117,6 +121,10 @@ SOURCE=.\null.c
 # Begin Source File
 
 SOURCE=.\bmp_stuff.h
+# End Source File
+# Begin Source File
+
+SOURCE=.\vga737.h
 # End Source File
 # End Group
 # Begin Group "Resource Files"
