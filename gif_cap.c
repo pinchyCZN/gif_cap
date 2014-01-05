@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "resource.h"
-
+#include "vga737.h"
 HINSTANCE ghinstance=0;
 HINSTANCE ghprevinstance=0;
 HWND ghdlg=0;
@@ -12,11 +12,13 @@ int auto_inc_fname=FALSE;
 int start_key=VK_RSHIFT;
 //int stop_key=VK_LCONTROL;
 int stop_key=VK_RSHIFT;
-int gif_delay=4;
-int cap_delay=33;
+int gif_delay=3;
+int cap_delay=29;
 int frame_limit=0;
 int old_frame_limit=0;
+int frame_count=0;
 int do_dither=TRUE;
+int show_fps=FALSE;
 
 int assert(int a)
 {
@@ -33,6 +35,38 @@ int strstri(const char *s1,const char *s2)
 			if(!s2[k+1])
 				return (s1+i);
 	return NULL;
+}
+int draw_char(unsigned char *pixels,int w,int h,unsigned char a,int x,int y,int cf,int cb)
+{
+	int i,j;
+	unsigned char *p=vga737_bin+a*12;
+	for(i=0;i<12;i++){
+		for(j=0;j<8;j++){
+			int c=0;
+			int px,py;
+			if(p[i]&(1<<(7-j)))
+				c=cf;
+			else
+				c=cb;
+			px=x+j;
+			py=y+i;
+			if(px<w && py<h){
+				pixels[px+py*w]=c;
+			}
+		}
+	}
+	return 0;
+}
+int draw_string(char *pixels,int w,int h,char *str,int x,int y,int cf,int cb)
+{
+	int i,len;
+	len=strlen(str);
+	for(i=0;i<len;i++){
+		if((x+i*8)>w)
+			break;
+		draw_char(pixels,w,h,str[i],x+i*8,y,cf,cb);
+	}
+	return 0;
 }
 int inc_fname(char *path,int pathlen)
 {
@@ -389,6 +423,7 @@ int animate(HWND hwnd,int step)
 		if(gsdata!=0){
 			animategif(gsdata,0,gif_delay,0,2);
 		}
+		frame_count=0;
 	}
 	else if(step==1){
 		unsigned char *pixels=0;
@@ -397,9 +432,28 @@ int animate(HWND hwnd,int step)
 			if(pixels!=0){
 				int len;
 				char str[80];
-				//putgifcolortable(gsdata,colortable);
+				float fps=0;
+				DWORD delta=0;
+				if(show_fps){
+					static DWORD tick=0,ctick;
+					ctick=GetTickCount();
+					if(frame_count==0)
+						tick=ctick;
+					delta=ctick-tick;
+					if(delta!=0)
+						fps=1000/delta;
+					else
+						fps=0;
+					sprintf(str,"%.0f",fps);
+					tick=ctick;
+					draw_string(pixels,w,h,str,0,0,255,0);
+				}
 				len=putgif(gsdata,pixels);
-				_snprintf(str,sizeof(str),"%i (0x%08X)",len,len);
+				frame_count++;
+				if(show_fps)
+					_snprintf(str,sizeof(str),"%i FPS=%.0f delta=%u (%i)",frame_count,fps,delta,len);
+				else
+					_snprintf(str,sizeof(str),"%i (%i)",frame_count,len);
 				str[sizeof(str)-1]=0;
 				SetWindowText(hwnd,str);
 				free(pixels);
@@ -411,7 +465,7 @@ int animate(HWND hwnd,int step)
 			char str[80];
 			int glen=0;
 			glen=endgif(gsdata);
-			_snprintf(str,sizeof(str),"DONE %i (0x%08X)",glen,glen);
+			_snprintf(str,sizeof(str),"DONE frames=%i size=%i",frame_count,glen);
 			SetWindowText(hwnd,str);
 			{
 				if(auto_inc_fname){
@@ -464,19 +518,19 @@ int key_thread()
 			Beep(1000,100);
 			thread_ack=0;
 			PostMessage(ghdlg,WM_APP,'1',0);
-			for(i=0;i<5000;i++){
+			while(TRUE){
 				if(thread_ack){
 					thread_ack=0;
+					if(frame_limit!=0){
+						if(frame_count>=frame_limit)
+							break;
+					}
 					PostMessage(ghdlg,WM_APP,'1',1);
 				}
 				if(sleep_exit(cap_delay,stop_key))
 					break;
 				if(GetAsyncKeyState(stop_key)&1)
 					break;
-				if(frame_limit!=0){
-					if(frame_limit>i)
-						break;
-				}
 			}
 			PostMessage(ghdlg,WM_APP,'1',2);
 			Beep(800,100);
@@ -588,6 +642,7 @@ int edit_changed(HWND hwnd,int ctrl,int *value)
 BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
 	static HRGN hregion=0;
+	static HWND hgrippy=0;
 	if(msg!=WM_CTLCOLORSTATIC && msg!=WM_SETCURSOR && msg!=WM_NCHITTEST
 		&& msg!=WM_MOUSEMOVE && msg!=WM_MOUSEFIRST)
 	{
@@ -624,6 +679,9 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			if(do_dither)
 				CheckDlgButton(hwnd,IDC_DITHER,BST_CHECKED);
 			create_ctable();
+			hgrippy=create_grippy(hwnd);
+			if(hgrippy)
+				SetWindowPos(hgrippy,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);
 		}
 		break;
 	case WM_APP:
@@ -651,6 +709,7 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 		get_main_region(hwnd,&hregion);
 		//clear_window(hwnd,&hregion);
 		SetWindowRgn(hwnd,hregion,TRUE);
+		grippy_move(hwnd,hgrippy);
 		break;
 	case WM_HELP:
 		break;
@@ -729,6 +788,12 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 				printf("frame_limit=%i\n",frame_limit);
 				ShowWindow(GetDlgItem(hwnd,IDC_FRAME_COUNT),FALSE);
 			}
+			break;
+		case IDC_FPS:
+			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_FPS))
+				show_fps=TRUE;
+			else
+				show_fps=FALSE;
 			break;
 		case IDC_FRAME_COUNT:
 			switch(HIWORD(wparam)){

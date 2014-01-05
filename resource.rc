@@ -53,6 +53,8 @@ BEGIN
     PUSHBUTTON      "Exit",IDCANCEL,90,104,49,14
     CONTROL         "dither",IDC_DITHER,"Button",BS_AUTOCHECKBOX | 
                     WS_TABSTOP,89,92,33,10
+    CONTROL         "FPS",IDC_FPS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,128,
+                    93,29,10
 END
 
 
