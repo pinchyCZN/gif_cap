@@ -202,7 +202,71 @@ int clear_window(HWND hwnd,HRGN *hregion)
 	}
 	set_title(hwnd);
 }
+//6 color steps in r,g,b direction
+unsigned char colors[6]={0,51,102,153,204,255};
+//used to help find closest color
+unsigned char mid_colors[10]={0,26,51,76,102,128,153,178,204,230};
+static int colortable[256*3+1];
+int create_ctable()
+{
+	int i,index;
+	static int created=FALSE;
+	if(created)
+		return TRUE;
+	index=0;
+	{
+		int x,y,z;
+		for(x=0;x<6;x++){
+			for(y=0;y<6;y++){
+				for(z=0;z<6;z++){
+					colortable[index*3]=colors[x];
+					colortable[index*3+1]=colors[y];
+					colortable[index*3+2]=colors[z];
+					index++;
+				}
+			}
+		}
 
+	}
+	//table must be size of power of 2, pad out rest of colors
+	for(i=index;i<256;i++){
+		colortable[index*3]=255;
+		colortable[index*3+1]=255;
+		colortable[index*3+2]=255;
+		index++;
+	}
+	colortable[index*3]=-1;
+	created=TRUE;
+	return index;
+}
+int get_closest_cindex(unsigned char c)
+{
+	int i;
+	for(i=0;i<sizeof(mid_colors)/sizeof(char);i++){
+		if(c<=mid_colors[i]){
+			return i/2;
+		}
+	}
+	return (sizeof(colors)/sizeof(unsigned char))-1;
+}
+int closest_color(unsigned char c)
+{
+	int i;
+	for(i=0;i<sizeof(mid_colors)/sizeof(char);i++){
+		if(c<=mid_colors[i]){
+			return colors[(i/2)];
+		}
+	}
+	return colors[(sizeof(colors)/sizeof(unsigned char))-1];
+}
+int get_color_index(unsigned char r,unsigned char g,unsigned char b)
+{
+	int index=0;
+	index+=get_closest_cindex(b);
+	index+=get_closest_cindex(g)*6;
+	index+=get_closest_cindex(r)*6*6;
+	return index;
+}
 int dither(unsigned char *data,int w,int h,int row_width)
 {
 	int i,j;
@@ -211,14 +275,14 @@ int dither(unsigned char *data,int w,int h,int row_width)
 			int x;
 			unsigned char r,g,b;
 			unsigned char nr,ng,nb;
-			unsigned char quant[3];
+			char quant[3];
 			x=(i*row_width)+(j*4);
 			b=data[x+0];
 			g=data[x+1];
 			r=data[x+2];
-			nr=r&0xC0;
-			nb=b&0xE0;
-			ng=g&0xE0;
+			nr=closest_color(r);
+			nb=closest_color(b);
+			ng=closest_color(g);
 			data[x+0]=nb;
 			data[x+1]=ng;
 			data[x+2]=nr;
@@ -229,12 +293,14 @@ int dither(unsigned char *data,int w,int h,int row_width)
 				int k;
 				for(k=0;k<3;k++){
 					int z;
-					unsigned int delta;
+					int delta;
 					if((j+1)<w){
 						z=(i*row_width)+((j+1)*4);
 						delta=data[z+k]+(7*quant[k]/16);
 						if(delta>0xFF)
 							delta=0xFF;
+						else if(delta<0)
+							delta=0;
 						data[z+k]=delta;
 					}
 					if((i+1)<h){
@@ -243,6 +309,8 @@ int dither(unsigned char *data,int w,int h,int row_width)
 							delta=data[z+k]+(3*quant[k]/16);
 							if(delta>0xFF)
 								delta=0xFF;
+							else if(delta<0)
+								delta=0;
 							data[z+k]=delta;
 						}
 						{
@@ -250,6 +318,8 @@ int dither(unsigned char *data,int w,int h,int row_width)
 							delta=data[z+k]+(5*quant[k]/16);
 							if(delta>0xFF)
 								delta=0xFF;
+							else if(delta<0)
+								delta=0;
 							data[z+k]=delta;
 						}
 						if((j+1)<w){
@@ -257,6 +327,8 @@ int dither(unsigned char *data,int w,int h,int row_width)
 							delta=data[z+k]+(quant[k]/16);
 							if(delta>0xFF)
 								delta=0xFF;
+							else if(delta<0)
+								delta=0;
 							data[z+k]=delta;
 						}
 					}
@@ -268,7 +340,6 @@ int dither(unsigned char *data,int w,int h,int row_width)
 
 
 
-static int colortable[256*3+1];
 int downsample(unsigned char *data,int w,int h,int row_width,unsigned char *pixels)
 {
 	if(pixels!=0){
@@ -276,37 +347,16 @@ int downsample(unsigned char *data,int w,int h,int row_width,unsigned char *pixe
 		for(i=h-1;i>=0;i--){
 			for(j=0;j<w;j++){
 				int x=(i*row_width)+(j*4);
-				unsigned char index=0;
+				unsigned char index;
 				unsigned char r,g,b;
-				b=data[x+0]&0xE0;
-				g=data[x+1]&0xE0;
-				r=data[x+2]&0xC0;
-				index=r|(g>>2)|(b>>6);
+				b=data[x+0];
+				g=data[x+1];
+				r=data[x+2];
+				index=get_color_index(r,g,b);
 				pixels[poffset++]=index;
 			}
 		}
 	}
-}
-int create_ctable()
-{
-	int i,index;
-	static int created=FALSE;
-	if(created)
-		return TRUE;
-	index=0;
-	for(i=0;i<256;i++){
-		unsigned char r,g,b;
-		r=i>>6;
-		g=(i>>3)&0x7;
-		b=i&3;
-		colortable[index*3]=i&0xE0; //r<<6;
-		colortable[index*3+1]=g<<5;
-		colortable[index*3+2]=b<<5;
-		index++;
-	}
-	colortable[index*3]=-1;
-	created=TRUE;
-	return TRUE;
 }
 int copy_cmap(RGBQUAD *rgb)
 {
@@ -325,15 +375,17 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 	unsigned char *data;
 	int *rgb;
 	BITMAPINFO *bmi;
+	BITMAPINFO _bmi={0};
+	bmi=&_bmi;
 
-	bmi=malloc(sizeof(BITMAPINFO)+(256*sizeof(RGBQUAD)));
-	if(!bmi)
-		return result;
+	//bmi=malloc(sizeof(BITMAPINFO)+(256*sizeof(RGBQUAD)));
+	//if(!bmi)
+	//	return result;
 	data=GlobalAlloc(GMEM_FIXED,bmp->bmWidthBytes*bmp->bmHeight);
 	
 	if(!data){
-		if(bmi)
-			free(bmi);
+		//if(bmi)
+		//	free(bmi);
 		return result;
 	}
 	bmi->bmiHeader.biSize=sizeof(BITMAPINFOHEADER);
@@ -345,18 +397,21 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 	bmi->bmiHeader.biClrImportant=0;
 	bmi->bmiHeader.biClrUsed=0;
 	bmi->bmiHeader.biSizeImage = ((bmi->bmiHeader.biWidth * 32 +31)& ~31) /8 * bmi->bmiHeader.biHeight;
-	rgb=&bmi->bmiColors[0];
-	rgb[0]=0xDEADBEEF;
+	//rgb=&bmi->bmiColors[0];
+	//rgb[0]=0xDEADBEEF;
 
 	if(GetDIBits(hdc,hbmp,0,(WORD)bmp->bmHeight,data,bmi,DIB_RGB_COLORS)){
 			*pixels=malloc(w*h);
 			if(*pixels!=0){
+				/*
 				if(bmi->bmiHeader.biBitCount==8){
 					copy_cmap(bmi->bmiColors);
 					memcpy(*pixels,data,w*h);
 					result=TRUE;
 				}
-				else{
+				else
+				*/
+				{
 					int row_width;
 					row_width=bmp->bmWidthBytes;
 					if(do_dither)
@@ -368,8 +423,8 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 	}
 	if(data)
 		GlobalFree((HGLOBAL)data);
-	if(bmi)
-		free(bmi);
+	//if(bmi)
+	//	free(bmi);
 
 	return result;
 }
@@ -509,6 +564,8 @@ int key_thread()
 			continue;
 		if(GetAsyncKeyState(start_key)&0x8001){
 			int i;
+			int frame_done=FALSE;
+			int do_sleep=TRUE;
 			WINDOWPLACEMENT wp={0};
 			wp.length=sizeof(wp);
 			if(GetWindowPlacement(ghdlg,&wp)){
@@ -526,12 +583,21 @@ int key_thread()
 							break;
 					}
 					PostMessage(ghdlg,WM_APP,'1',1);
+					frame_done=TRUE;
+					do_sleep=TRUE;
 				}
-				if(sleep_exit(cap_delay,stop_key))
-					break;
+				if(do_sleep){
+					if(sleep_exit(cap_delay,stop_key))
+						break;
+				}
+				else
+					Sleep(0);
 				if(GetAsyncKeyState(stop_key)&1)
 					break;
+				do_sleep=FALSE;
 			}
+			if(!frame_done)
+				PostMessage(ghdlg,WM_APP,'1',1);
 			PostMessage(ghdlg,WM_APP,'1',2);
 			Beep(800,100);
 			Sleep(250);
