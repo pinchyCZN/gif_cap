@@ -205,7 +205,7 @@ int clear_window(HWND hwnd,HRGN *hregion)
 //6 color steps in r,g,b direction
 unsigned char colors[6]={0,51,102,153,204,255};
 //used to help find closest color
-unsigned char mid_colors[10]={0,26,51,76,102,128,153,178,204,230};
+unsigned char mid_colors[5]={26,76,128,178,230};
 static int colortable[256*3+1];
 //look up tables to speed things up
 static unsigned char color_lut[256];
@@ -215,7 +215,7 @@ int closest_color_index(unsigned char c)
 	int i;
 	for(i=0;i<sizeof(mid_colors)/sizeof(char);i++){
 		if(c<=mid_colors[i]){
-			return i/2;
+			return i;
 		}
 	}
 	return (sizeof(colors)/sizeof(unsigned char))-1;
@@ -225,7 +225,7 @@ int closest_color(unsigned char c)
 	int i;
 	for(i=0;i<sizeof(mid_colors)/sizeof(char);i++){
 		if(c<=mid_colors[i]){
-			return colors[(i/2)];
+			return colors[i];
 		}
 	}
 	return colors[(sizeof(colors)/sizeof(unsigned char))-1];
