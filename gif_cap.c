@@ -6,6 +6,7 @@
 HINSTANCE ghinstance=0;
 HINSTANCE ghprevinstance=0;
 HWND ghdlg=0;
+int state_control=0;
 int thread_ack=0;
 char gif_fname[MAX_PATH]={0};
 int auto_inc_fname=FALSE;
@@ -544,6 +545,13 @@ int animate(HWND hwnd,int step)
 						fwrite(gifimage,1,glen,f);
 						fclose(f);
 					}
+					else{
+						char str[MAX_PATH]={0};
+						_snprintf(str,sizeof(str),"invalid file:%s",gif_fname);
+						str[sizeof(str)-1]=0;
+						SetWindowText(hwnd,str);
+						PostMessage(hwnd,WM_APP,'2',0);
+					}
 				}
 			}
 		}
@@ -583,6 +591,15 @@ int key_thread()
 				if(wp.showCmd==SW_SHOWMINIMIZED)
 					continue;
 			}
+			if(!verify_path(gif_fname)){
+				char str[MAX_PATH]={0};
+				_snprintf(str,sizeof(str),"invalid path:%s",gif_fname);
+				str[sizeof(str)-1]=0;
+				SetWindowText(ghdlg,str);
+				PostMessage(ghdlg,WM_APP,'2',0);
+				continue;
+			}
+			state_control=1;
 			Beep(1000,100);
 			thread_ack=0;
 			tick=GetTickCount();
@@ -599,7 +616,7 @@ int key_thread()
 				}
 				if(sleep_exit(cap_delay,&tick,stop_key))
 					break;
-				if(GetAsyncKeyState(stop_key)&1)
+				if(state_control!=1)
 					break;
 			}
 			if(!frame_done)
@@ -608,6 +625,10 @@ int key_thread()
 			Beep(800,100);
 			Sleep(250);
 			GetAsyncKeyState(start_key);
+			if(state_control!=1)
+				PostMessage(ghdlg,WM_APP,'2',0);
+
+			state_control=0;
 		}
 		else if(GetAsyncKeyState(VK_F1)&0x8001){
 			PostMessage(ghdlg,WM_APP,'2',0);
@@ -632,6 +653,18 @@ int dir_exists(char *path)
 {
 	DWORD attrib=GetFileAttributes(path);
 	if((attrib!=MAXDWORD) && (attrib&FILE_ATTRIBUTE_DIRECTORY))
+		return TRUE;
+	else
+		return FALSE;
+}
+int verify_path(char *path)
+{
+	char tmp[MAX_PATH]={0};
+	char drive[_MAX_DRIVE]={0},dir[_MAX_DIR]={0},fname[_MAX_FNAME]={0},ext[_MAX_EXT]={0};
+	_splitpath(path,drive,dir,fname,ext);
+	_snprintf(tmp,sizeof(tmp),"%s%s",drive,dir);
+	tmp[sizeof(tmp)-1]=0;
+	if(dir_exists(tmp))
 		return TRUE;
 	else
 		return FALSE;
@@ -715,12 +748,16 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
 	static HRGN hregion=0;
 	static HWND hgrippy=0;
+#ifdef _DEBUG
+	/*
 	if(msg!=WM_CTLCOLORSTATIC && msg!=WM_SETCURSOR && msg!=WM_NCHITTEST
 		&& msg!=WM_MOUSEMOVE && msg!=WM_MOUSEFIRST)
 	{
 		static DWORD tick=0;
 		print_msg(msg,lparam,wparam,hwnd);
 	}
+	*/
+#endif
 	switch(msg){
 	case WM_INITDIALOG:
 		{
@@ -754,6 +791,7 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			hgrippy=create_grippy(hwnd);
 			if(hgrippy)
 				SetWindowPos(hgrippy,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);
+			_beginthread(key_thread,0,0);
 		}
 		break;
 	case WM_APP:
@@ -763,15 +801,15 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 				clear_window(hwnd,&hregion);
 				SetWindowRgn(hwnd,hregion,TRUE);
 			}
-
 			animate(hwnd,lparam);
-			printf("made it\n");
 			break;
 		case '2':
 			get_main_region(hwnd,&hregion);
 			SetWindowRgn(hwnd,hregion,TRUE);
 			break;
-
+		case '3':
+			SetFocus(GetDlgItem(hwnd,IDCANCEL));
+			break;
 		}
 		break;
 	case WM_MOVE:
@@ -908,7 +946,10 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			}
 			break;
 		case IDCANCEL:
-			PostMessage(hwnd,WM_CLOSE,0,0);
+			if(state_control==0)
+				PostMessage(hwnd,WM_CLOSE,0,0);
+			else
+				state_control=2;
 			break;
 		}
 		break;
@@ -923,7 +964,8 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 
 int CALLBACK WinMain(HINSTANCE hinstance,HINSTANCE hprevinstance,char *cmdline,int showcmd)
 {
-//	open_console();
-	_beginthread(key_thread,0,0);
+#ifdef _DEBUG
+	open_console();
+#endif
 	return DialogBoxParam(hinstance,MAKEINTRESOURCE(IDD_DIALOG1),NULL,gifcap,NULL);
 }
