@@ -565,10 +565,10 @@ int sleep_exit(int delay,DWORD *tick,int key)
 {
 	DWORD tc,delta=MAXDWORD;
 	do{
-		if(GetAsyncKeyState(key)&0x8001){
+		Sleep(1);
+		if(GetAsyncKeyState(key)&0x0001){
 			return TRUE;
 		}
-		Sleep(1);
 		tc=GetTickCount();
 		delta=tc-*tick;
 	}while(delta<delay);
