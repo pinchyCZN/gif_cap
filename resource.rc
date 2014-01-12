@@ -37,11 +37,9 @@ BEGIN
     CONTROL         "auto increment filename",IDC_AUTOINCREMENT,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,6,30,121,13
     RTEXT           "start key",IDC_STATIC,4,49,62,8,SS_CENTERIMAGE
-    COMBOBOX        IDC_START_KEY,82,46,107,105,CBS_DROPDOWNLIST | CBS_SORT | 
-                    WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "start key",IDC_START_KEY,76,44,109,14
     RTEXT           "stop key",IDC_STATIC,3,63,65,8,SS_CENTERIMAGE
-    COMBOBOX        IDC_STOP_KEY,82,63,108,112,CBS_DROPDOWNLIST | CBS_SORT | 
-                    WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "stop key",IDC_STOP_KEY,76,60,109,14
     RTEXT           "gif delay",IDC_STATIC,0,78,35,8,SS_CENTERIMAGE
     EDITTEXT        IDC_GIF_DELAY,39,76,40,14,ES_AUTOHSCROLL | ES_NUMBER
     CONTROL         "frame limit :",IDC_FRAME_LIMIT,"Button",BS_AUTOCHECKBOX | 
@@ -55,6 +53,16 @@ BEGIN
                     93,29,10
     DEFPUSHBUTTON   "clear window",IDOK,0,107,50,14
     PUSHBUTTON      "Exit",IDCANCEL,90,104,49,14
+END
+
+IDD_GET_KEY DIALOG DISCARDABLE  0, 0, 186, 47
+STYLE DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Press key"
+FONT 8, "MS Sans Serif"
+BEGIN
+    EDITTEXT        IDC_EDIT1,7,7,172,15,ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "OK",IDOK,7,26,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,129,26,50,14
 END
 
 
@@ -81,6 +89,25 @@ BEGIN
     "\0"
 END
 
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO DISCARDABLE 
+BEGIN
+    IDD_GET_KEY, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 179
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 40
+    END
+END
 #endif    // APSTUDIO_INVOKED
 
 #endif    // English (U.S.) resources

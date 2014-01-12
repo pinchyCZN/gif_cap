@@ -6,13 +6,13 @@
 HINSTANCE ghinstance=0;
 HINSTANCE ghprevinstance=0;
 HWND ghdlg=0;
+int pause_thread=FALSE;
 int state_control=0;
 int thread_ack=0;
 char gif_fname[MAX_PATH]={0};
 int auto_inc_fname=FALSE;
-int start_key=VK_RSHIFT;
-//int stop_key=VK_LCONTROL;
-int stop_key=VK_RSHIFT;
+int start_key=VK_SNAPSHOT;
+int stop_key=VK_SNAPSHOT;
 int gif_delay=3;
 int cap_delay=29;
 int frame_limit=0;
@@ -498,7 +498,7 @@ int animate(HWND hwnd,int step)
 			if(pixels!=0){
 				int len;
 				char str[80];
-				float fps=0;
+				double fps=0;
 				DWORD delta=0;
 				if(show_fps){
 					static DWORD tick=0,ctick;
@@ -577,10 +577,22 @@ int sleep_exit(int delay,DWORD *tick,int key)
 }
 int key_thread()
 {
+	int show_window_key=VK_F1;
 	while(TRUE){
 		Sleep(100);
 		if(ghdlg==0)
 			continue;
+		if(pause_thread){
+			while(pause_thread){
+				Sleep(100);
+			}
+			GetAsyncKeyState(start_key);
+			continue;
+		}
+		if(start_key==VK_F1)
+			show_window_key=VK_F2;
+		else
+			show_window_key=VK_F1;
 		if(GetAsyncKeyState(start_key)&0x8001){
 			int i;
 			int frame_done=FALSE;
@@ -630,7 +642,7 @@ int key_thread()
 
 			state_control=0;
 		}
-		else if(GetAsyncKeyState(VK_F1)&0x8001){
+		else if(GetAsyncKeyState(show_window_key)&0x8001){
 			PostMessage(ghdlg,WM_APP,'2',0);
 		}
 	}
@@ -694,48 +706,18 @@ int set_file_path(HWND hwnd,int ctrl)
 	SetDlgItemText(hwnd,ctrl,path);
 	return TRUE;
 }
-
-int populate_vkeys(HWND hwnd,int ctrl)
+int set_keybutton_text(HWND hwnd,int ctrl,int key)
 {
-extern char *virtual_keys[256];
-	int i;
-	for(i=0;i<256;i++){
-		int index;
-		index=SendDlgItemMessage(hwnd,ctrl,CB_ADDSTRING,0,virtual_keys[i]);
-		if(index>=0)
-			SendDlgItemMessage(hwnd,ctrl,CB_SETITEMDATA,index,i);	
+extern char *virtual_keys[];
+	int result=FALSE;
+	char *s=virtual_keys[key&0xFF];
+	HWND h;
+	h=GetDlgItem(hwnd,ctrl);
+	if(h){
+		SetWindowText(h,s);
+		result=TRUE;
 	}
-	return TRUE;
-}
-int set_list_index(HWND hwnd,int ctrl,int key)
-{
-	int i,count;
-	count=SendDlgItemMessage(hwnd,ctrl,CB_GETCOUNT,0,0);
-	if(count==CB_ERR)
-		return FALSE;
-	for(i=0;i<count;i++){
-		int data;
-		data=SendDlgItemMessage(hwnd,ctrl,CB_GETITEMDATA,i,0);
-		if(data!=CB_ERR && data==key){
-			SendDlgItemMessage(hwnd,ctrl,CB_SETCURSEL,i,0);
-			break;
-		}
-	}
-	return TRUE;
-}
-int key_changed(HWND hwnd,int ctrl,int *key)
-{
-	int index;
-	index=SendDlgItemMessage(hwnd,ctrl,CB_GETCURSEL,0,0);
-	if(index>=0){
-		int data;
-		data=SendDlgItemMessage(hwnd,ctrl,CB_GETITEMDATA,index,0);
-		if(data!=CB_ERR){
-			key[0]=data;
-			return TRUE;
-		}
-	}
-	return FALSE;
+	return result;
 }
 int edit_changed(HWND hwnd,int ctrl,int *value)
 {
@@ -744,19 +726,79 @@ int edit_changed(HWND hwnd,int ctrl,int *value)
 	value[0]=atoi(str);
 	return TRUE;
 }
+WNDPROC orig_edit=0;
+static int last_key=0;
+LRESULT APIENTRY subclass_edit(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
+{
+	//print_msg(msg,lparam,wparam,hwnd);
+	switch(msg){
+	case WM_SYSKEYUP:
+	case WM_KEYUP:
+		{
+			int code=(lparam>>16)&0xFF;
+			int extended=(lparam>>24)&1;
+			int vkey;
+			vkey=MapVirtualKey(code,3);
+			if(vkey!=0){
+				if(wparam==VK_SNAPSHOT)
+					last_key=VK_SNAPSHOT;
+				else{
+					if(vkey==VK_LMENU && extended)
+						vkey=VK_RMENU;
+					if(vkey==VK_LCONTROL && extended)
+						vkey=VK_RCONTROL;
+					last_key=vkey;
+				}
+			}
+			else
+				last_key=wparam;
+			PostMessage(GetParent(hwnd),WM_APP,0,0);
+		}
+		break;
+	}
+	return CallWindowProc(orig_edit,hwnd,msg,wparam,lparam); 
+}
+BOOL CALLBACK get_hotkey(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
+{
+	static int *key=0;
+	switch(msg){
+	case WM_INITDIALOG:
+		orig_edit=SetWindowLong(GetDlgItem(hwnd,IDC_EDIT1),GWL_WNDPROC,subclass_edit);
+		last_key=0;
+		key=lparam;
+		if(key==0)
+			EndDialog(hwnd,0);
+		break;
+	case WM_COMMAND:
+		switch(LOWORD(wparam)){
+		case IDCANCEL:
+			EndDialog(hwnd,0);
+			break;
+		}
+		break;
+	case WM_APP:
+		if(last_key!=VK_ESCAPE)
+			key[0]=last_key;
+		EndDialog(hwnd,0);
+		break;
+	case WM_CLOSE:
+		EndDialog(hwnd,0);
+		break;
+	}
+	return 0;
+}
 BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 {
 	static HRGN hregion=0;
 	static HWND hgrippy=0;
 #ifdef _DEBUG
-	/*
+	if(FALSE)
 	if(msg!=WM_CTLCOLORSTATIC && msg!=WM_SETCURSOR && msg!=WM_NCHITTEST
 		&& msg!=WM_MOUSEMOVE && msg!=WM_MOUSEFIRST)
 	{
 		static DWORD tick=0;
 		print_msg(msg,lparam,wparam,hwnd);
 	}
-	*/
 #endif
 	switch(msg){
 	case WM_INITDIALOG:
@@ -781,10 +823,8 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 				sprintf(str,"%i",cap_delay);
 				SetDlgItemText(hwnd,IDC_CAP_DELAY,str);
 			}
-			populate_vkeys(hwnd,IDC_START_KEY);
-			populate_vkeys(hwnd,IDC_STOP_KEY);
-			set_list_index(hwnd,IDC_START_KEY,start_key);
-			set_list_index(hwnd,IDC_STOP_KEY,stop_key);
+			set_keybutton_text(hwnd,IDC_START_KEY,start_key);
+			set_keybutton_text(hwnd,IDC_STOP_KEY,stop_key);
 			if(do_dither)
 				CheckDlgButton(hwnd,IDC_DITHER,BST_CHECKED);
 			create_ctable();
@@ -859,30 +899,6 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 				do_dither=TRUE;
 			else
 				do_dither=FALSE;
-			if(do_dither){
-				char str[MAX_PATH]={0};
-				char *s;
-				GetDlgItemText(hwnd,IDC_FNAME,str,sizeof(str));
-				s=strstri(str,"d.gif");
-				if(s==0){
-					s=strstri(str,".gif");
-					if(s){
-						s[0]=0;
-						_snprintf(str,sizeof(str),"%sd.gif",str);
-						SetDlgItemText(hwnd,IDC_FNAME,str);
-					}
-				}
-			}else{
-				char str[MAX_PATH]={0};
-				char *s;
-				GetDlgItemText(hwnd,IDC_FNAME,str,sizeof(str));
-				s=strstri(str,"d.gif");
-				if(s){
-					s[0]=0;
-					_snprintf(str,sizeof(str),"%s.gif",str);
-					SetDlgItemText(hwnd,IDC_FNAME,str);
-				}
-			}
 			break;
 		case IDC_FRAME_LIMIT:
 			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_FRAME_LIMIT)){
@@ -930,24 +946,26 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 			}
 			break;
 		case IDC_START_KEY:
-			switch(HIWORD(wparam)){
-			case CBN_SELCHANGE:
-				if(key_changed(hwnd,IDC_START_KEY,&start_key))
-					printf("start_key=%i\n",start_key);
-				break;
-			}
+			pause_thread=TRUE;
+			DialogBoxParam(ghinstance,IDD_GET_KEY,hwnd,get_hotkey,&start_key);
+			stop_key=start_key;
+			set_keybutton_text(hwnd,IDC_START_KEY,start_key);
+			set_keybutton_text(hwnd,IDC_STOP_KEY,stop_key);
+			pause_thread=FALSE;
 			break;
 		case IDC_STOP_KEY:
-			switch(HIWORD(wparam)){
-			case CBN_SELCHANGE:
-				if(key_changed(hwnd,IDC_STOP_KEY,&stop_key))
-					printf("stop_key=%i\n",stop_key);
-				break;
-			}
+			pause_thread=TRUE;
+			DialogBoxParam(ghinstance,IDD_GET_KEY,hwnd,get_hotkey,&stop_key);
+			set_keybutton_text(hwnd,IDC_STOP_KEY,stop_key);
+			pause_thread=FALSE;
 			break;
 		case IDCANCEL:
-			if(state_control==0)
-				PostMessage(hwnd,WM_CLOSE,0,0);
+			if(state_control==0){
+				get_main_region(hwnd,&hregion);
+				SetWindowRgn(hwnd,hregion,TRUE);
+				if(IDOK==MessageBox(hwnd,"OK to exit?","Exit?",MB_OKCANCEL|MB_SYSTEMMODAL))
+					PostMessage(hwnd,WM_CLOSE,0,0);
+			}
 			else
 				state_control=2;
 			break;

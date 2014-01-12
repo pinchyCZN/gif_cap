@@ -40,6 +40,7 @@ RSC=rc.exe
 # PROP Use_Debug_Libraries 0
 # PROP Output_Dir "Release"
 # PROP Intermediate_Dir "Release"
+# PROP Ignore_Export_Lib 0
 # PROP Target_Dir ""
 # ADD BASE CPP /nologo /W3 /GX /O2 /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_MBCS" /YX /FD /c
 # ADD CPP /nologo /MT /W3 /GX /O2 /I "." /D "WIN32" /D "NDEBUG" /D "_WINDOWS" /D "_MBCS" /FR /YX /FD /c
@@ -56,7 +57,7 @@ LINK32=link.exe
 # Begin Special Build Tool
 TargetPath=.\Release\gif_cap.exe
 SOURCE="$(InputPath)"
-PostBuild_Cmds=upx $(TargetPath)
+PostBuild_Cmds=upx $(TargetPath)	copy $(TargetPath) "C:\Program Files\gif_cap\"
 # End Special Build Tool
 
 !ELSEIF  "$(CFG)" == "gif_cap - Win32 Debug"

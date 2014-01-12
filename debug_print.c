@@ -257,7 +257,7 @@ char *virtual_keys[256]={
 "SELECT", //41
 "PRINT", //42
 "EXECUTE", //43
-"SNAPSHOT", //44
+"PRINT SCREEN", //44
 "INSERT", //45
 "DELETE", //46
 "HELP", //47
