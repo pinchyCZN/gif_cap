@@ -485,6 +485,7 @@ int animate(HWND hwnd,int step)
 		w=rect.right-rect.left-1;
 		h=rect.bottom-rect.top-1;
 
+		gifimage=0;
 		gsdata=newgif(&gifimage,w,h,colortable,0);
 		if(gsdata!=0){
 			animategif(gsdata,0,gif_delay,0,2);
@@ -493,7 +494,7 @@ int animate(HWND hwnd,int step)
 	}
 	else if(step==1){
 		unsigned char *pixels=0;
-		if(gifimage!=0){
+		if(gsdata!=0){
 			take_snap(hwnd,&pixels,w,h);
 			if(pixels!=0){
 				int len;
@@ -533,30 +534,31 @@ int animate(HWND hwnd,int step)
 			glen=endgif(gsdata);
 			_snprintf(str,sizeof(str),"DONE frames=%i size=%i",frame_count,glen);
 			SetWindowText(hwnd,str);
-			{
-				if(auto_inc_fname){
-					inc_fname(gif_fname,sizeof(gif_fname));
-					SetDlgItemText(hwnd,IDC_FNAME,gif_fname);
-				}
-				if(gif_fname[0]!=0){
-					FILE *f;
-					f=fopen(gif_fname,"wb");
-					if(f!=0){
+			if(auto_inc_fname){
+				inc_fname(gif_fname,sizeof(gif_fname));
+				SetDlgItemText(hwnd,IDC_FNAME,gif_fname);
+			}
+			if(gif_fname[0]!=0){
+				FILE *f;
+				f=fopen(gif_fname,"wb");
+				if(f!=0){
+					if(gifimage!=0)
 						fwrite(gifimage,1,glen,f);
-						fclose(f);
-					}
-					else{
-						char str[MAX_PATH]={0};
-						_snprintf(str,sizeof(str),"invalid file:%s",gif_fname);
-						str[sizeof(str)-1]=0;
-						SetWindowText(hwnd,str);
-						PostMessage(hwnd,WM_APP,'2',0);
-					}
+					fclose(f);
+				}
+				else{
+					char str[MAX_PATH]={0};
+					_snprintf(str,sizeof(str),"invalid file:%s",gif_fname);
+					str[sizeof(str)-1]=0;
+					SetWindowText(hwnd,str);
+					PostMessage(hwnd,WM_APP,'2',0);
 				}
 			}
 		}
-		if(gifimage!=0)
+		if(gifimage!=0){
 			free(gifimage);
+			gifimage=0;
+		}
 	}
 	thread_ack=1;
 	return TRUE;
