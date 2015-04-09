@@ -35,7 +35,7 @@ BEGIN
     LTEXT           "output filename:",IDC_STATIC,5,4,79,9
     EDITTEXT        IDC_FNAME,0,15,156,15,ES_AUTOHSCROLL
     CONTROL         "auto increment filename",IDC_AUTOINCREMENT,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,6,30,121,13
+                    BS_AUTOCHECKBOX | WS_TABSTOP,6,30,96,13
     RTEXT           "start key",IDC_STATIC,4,49,62,8,SS_CENTERIMAGE
     PUSHBUTTON      "start key",IDC_START_KEY,76,44,109,14
     RTEXT           "stop key",IDC_STATIC,3,63,65,8,SS_CENTERIMAGE
@@ -53,6 +53,8 @@ BEGIN
                     93,29,10
     DEFPUSHBUTTON   "clear window",IDOK,0,107,50,14
     PUSHBUTTON      "Exit",IDCANCEL,90,104,49,14
+    CONTROL         "Single step",IDC_STEP,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,113,31,66,10
 END
 
 IDD_GET_KEY DIALOG DISCARDABLE  0, 0, 186, 47

@@ -20,6 +20,7 @@ int old_frame_limit=0;
 int frame_count=0;
 int do_dither=TRUE;
 int show_fps=FALSE;
+int do_single_step=FALSE;
 
 int assert(int a)
 {
@@ -577,6 +578,10 @@ int sleep_exit(int delay,DWORD *tick,int key)
 	*tick=tc;
 	return FALSE;
 }
+int handle_single_step()
+{
+
+}
 int key_thread()
 {
 	int show_window_key=VK_F1;
@@ -595,57 +600,62 @@ int key_thread()
 			show_window_key=VK_F2;
 		else
 			show_window_key=VK_F1;
-		if(GetAsyncKeyState(start_key)&0x8001){
-			int i;
-			int frame_done=FALSE;
-			DWORD tick;
-			WINDOWPLACEMENT wp={0};
-			wp.length=sizeof(wp);
-			if(GetWindowPlacement(ghdlg,&wp)){
-				if(wp.showCmd==SW_SHOWMINIMIZED)
-					continue;
-			}
-			if(!verify_path(gif_fname)){
-				char str[MAX_PATH]={0};
-				_snprintf(str,sizeof(str),"invalid path:%s",gif_fname);
-				str[sizeof(str)-1]=0;
-				SetWindowText(ghdlg,str);
-				PostMessage(ghdlg,WM_APP,'2',0);
-				continue;
-			}
-			state_control=1;
-			Beep(1000,100);
-			thread_ack=0;
-			tick=GetTickCount();
-			PostMessage(ghdlg,WM_APP,'1',0);
-			while(TRUE){
-				if(thread_ack){
-					thread_ack=0;
-					if(frame_limit!=0){
-						if(frame_count>=frame_limit)
-							break;
-					}
-					PostMessage(ghdlg,WM_APP,'1',1);
-					frame_done=TRUE;
+		if(do_single_step)
+			handle_single_step();
+		else{
+			if(GetAsyncKeyState(start_key)&0x8001){
+				int i;
+				int frame_done=FALSE;
+				DWORD tick;
+				WINDOWPLACEMENT wp={0};
+				wp.length=sizeof(wp);
+				if(GetWindowPlacement(ghdlg,&wp)){
+					if(wp.showCmd==SW_SHOWMINIMIZED)
+						continue;
 				}
-				if(sleep_exit(cap_delay,&tick,stop_key))
-					break;
+				if(!verify_path(gif_fname)){
+					char str[MAX_PATH]={0};
+					_snprintf(str,sizeof(str),"invalid path:%s",gif_fname);
+					str[sizeof(str)-1]=0;
+					SetWindowText(ghdlg,str);
+					PostMessage(ghdlg,WM_APP,'2',0);
+					continue;
+				}
+				state_control=1;
+				Beep(1000,100);
+				thread_ack=0;
+				tick=GetTickCount();
+				PostMessage(ghdlg,WM_APP,'1',0);
+				GetAsyncKeyState(stop_key);
+				while(TRUE){
+					if(thread_ack){
+						thread_ack=0;
+						if(frame_limit!=0){
+							if(frame_count>=frame_limit)
+								break;
+						}
+						PostMessage(ghdlg,WM_APP,'1',1);
+						frame_done=TRUE;
+					}
+					if(sleep_exit(cap_delay,&tick,stop_key))
+						break;
+					if(state_control!=1)
+						break;
+				}
+				if(!frame_done)
+					PostMessage(ghdlg,WM_APP,'1',1);
+				PostMessage(ghdlg,WM_APP,'1',2);
+				Beep(800,100);
+				Sleep(250);
+				GetAsyncKeyState(start_key);
 				if(state_control!=1)
-					break;
-			}
-			if(!frame_done)
-				PostMessage(ghdlg,WM_APP,'1',1);
-			PostMessage(ghdlg,WM_APP,'1',2);
-			Beep(800,100);
-			Sleep(250);
-			GetAsyncKeyState(start_key);
-			if(state_control!=1)
-				PostMessage(ghdlg,WM_APP,'2',0);
+					PostMessage(ghdlg,WM_APP,'2',0);
 
-			state_control=0;
-		}
-		else if(GetAsyncKeyState(show_window_key)&0x8001){
-			PostMessage(ghdlg,WM_APP,'2',0);
+				state_control=0;
+			}
+			else if(GetAsyncKeyState(show_window_key)&0x8001){
+				PostMessage(ghdlg,WM_APP,'2',0);
+			}
 		}
 	}
 }
@@ -916,6 +926,19 @@ BOOL CALLBACK gifcap(HWND hwnd,UINT msg,WPARAM wparam,LPARAM lparam)
 				printf("frame_limit=%i\n",frame_limit);
 				ShowWindow(GetDlgItem(hwnd,IDC_FRAME_COUNT),FALSE);
 			}
+			break;
+		case IDC_STEP:
+			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_STEP)){
+				do_single_step=TRUE;
+				start_key=VK_SNAPSHOT;
+				stop_key=VK_SCROLL;
+			}
+			else{
+				do_single_step=FALSE;
+				stop_key=start_key=VK_SNAPSHOT;
+			}
+			set_keybutton_text(hwnd,IDC_START_KEY,start_key);
+			set_keybutton_text(hwnd,IDC_STOP_KEY,stop_key);
 			break;
 		case IDC_FPS:
 			if(BST_CHECKED==IsDlgButtonChecked(hwnd,IDC_FPS))
