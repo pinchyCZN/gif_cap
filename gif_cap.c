@@ -440,12 +440,12 @@ int grab_pixels(HDC hdc,HBITMAP hbmp,BITMAP *bmp,unsigned char **pixels,int w,in
 
 	return result;
 }
-int take_snap(HWND hwnd,unsigned char **pixels,int w,int h)
+int take_snap(HWND hwnd,unsigned char **pixels,int x,int y,int w,int h)
 {
 	int result=FALSE;
 	HDC hscreen;
 	HWND hwin=hwnd;
-	//hwin=GetDesktopWindow();
+	hwin=GetDesktopWindow();
 	hscreen=GetDC(hwin);
 	if(hscreen!=0){
 		HDC htarget;
@@ -459,7 +459,7 @@ int take_snap(HWND hwnd,unsigned char **pixels,int w,int h)
 				BITMAP bmp;
 				HBITMAP hold;
 				hold=SelectObject(htarget,hbmp);
-				BitBlt(htarget, 0, 0, w, h, hscreen, 0, 0, SRCCOPY);
+				BitBlt(htarget, 0, 0, w, h, hscreen, x, y, SRCCOPY);
 				SelectObject(htarget, hold);
 				if(GetObject(hbmp,sizeof(BITMAP),&bmp)){
 				//pBitmapInfo=CreateBitmapInfoStruct(hbmp);
@@ -480,11 +480,15 @@ int animate(HWND hwnd,int step)
 	static unsigned char *gifimage=0;
 	static void *gsdata=0;
 	static int w=0,h=0;
+	static int x=0,y=0;
 	if(step==0){
 		RECT rect={0};
 		GetClientRect(hwnd,&rect);
 		w=rect.right-rect.left-1;
 		h=rect.bottom-rect.top-1;
+		MapWindowPoints(hwnd,NULL,&rect,2);
+		x=rect.left;
+		y=rect.top;
 
 		gifimage=0;
 		gsdata=newgif(&gifimage,w,h,colortable,0);
@@ -496,7 +500,7 @@ int animate(HWND hwnd,int step)
 	else if(step==1){
 		unsigned char *pixels=0;
 		if(gsdata!=0){
-			take_snap(hwnd,&pixels,w,h);
+			take_snap(hwnd,&pixels,x,y,w,h);
 			if(pixels!=0){
 				int len;
 				char str[80];
